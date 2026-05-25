@@ -1,0 +1,49 @@
+// Kalline Barreto – 2320623 – 3WC
+// Lúcio Campos – 2320955 – 3WC
+
+Relatório do Trabalho 2 – INF1018 (Software Básico)
+
+Este relatório tem como objetivo apresentar o funcionamento do microcompilador desenvolvido para o segundo trabalho da disciplina INF1018.
+
+O compilador, implementado na função peqcomp.c, tem como finalidade traduzir arquivos de texto contendo código na linguagem SBas para código de máquina executável na arquitetura x86-64. O resultado da compilação é armazenado em um vetor de bytes e pode ser chamado como uma função com até três parâmetros inteiros.
+
+Ambiente de Desenvolvimento e Execução dos Testes
+
+O projeto foi desenvolvido utilizando o Microsoft Visual Studio 2022 como editor de código. A compilação e a execução foram realizadas no ambiente WSL (Windows Subsystem for Linux) com o compilador GCC, utilizando o comando gcc -Wall -Wa,--execstack -o testapeqcomp testapeqcomp.c peqcomp.c.
+
+O arquivo testapeqcomp.c é o responsável por orquestrar a execução dos testes. Para rodar um caso de teste específico, é necessário garantir que os arquivos de teste SBas (ex: teste1.txt) estejam na mesma pasta do executável. Em seguida, deve-se alterar o nome do arquivo na chamada da função fopen dentro do código de testapeqcomp.c para o teste desejado e recompilar o projeto.
+
+Estrutura e Funcionamento do Compilador
+
+A estrutura geral do compilador consiste em ler o arquivo linha por linha, interpretar os comandos da linguagem SBas e gerar as instruções correspondentes em linguagem de máquina. O código gerado é escrito diretamente em um vetor de bytes chamado codigo, que é posteriormente convertido em um ponteiro de função.
+
+A primeira parte da geração de código consiste na criação do prólogo da função, que salva o ponteiro de base antigo com push %rbp, move o ponteiro da pilha para %rbp com mov %rsp, %rbp, e reserva espaço para variáveis locais com sub $32, %rsp, permitindo até 8 variáveis locais de 4 bytes cada.
+
+Cada linha do código SBas é então interpretada e tratada de forma diferente dependendo do comando. Comandos de atribuição do tipo vN : ... armazenam diretamente um valor em uma variável local. As instruções vN = ... op ... realizam operações aritméticas como soma, subtração e multiplicação, utilizando os registradores %eax e %ecx para executar a operação, e depois armazenando o resultado novamente em memória.
+
+O compilador também suporta o comando ret, que é utilizado para retornar um valor ao final da execução. Esse valor pode ser uma constante, uma variável local ou um parâmetro, e é carregado no registrador %eax antes de realizar o epílogo da função com leave e ret.
+
+Além disso, o compilador trata instruções de controle de fluxo com o comando iflez, que realiza um salto condicional caso o valor fornecido seja menor ou igual a zero. Esse salto é implementado com a instrução cmp $0, %eax seguida de jle, cujo offset é calculado posteriormente. Para isso, o compilador armazena informações sobre todos os saltos pendentes e resolve os offsets ao final, após saber a posição de início de cada linha no vetor de código.
+
+Validação e Análise dos Testes
+
+O funcionamento do compilador foi validado com os testes oferecidos no enunciado do trabalho e um adicional.
+
+1 - O primeiro teste, contendo apenas a instrução ret $100, foi compilado com sucesso e retorna o valor 100 corretamente.
+
+2 - No segundo teste, a variável v1 recebe o parâmetro p1, incrementa em 1 e retorna o novo valor; esse comportamento foi reproduzido corretamente durante a execução.
+
+3 - No terceiro teste, foi verificada uma condicional com salto, em que um valor é incrementado e testado com iflez. Dependendo do resultado, o programa retorna 0 ou 1. Essa lógica condicional foi executada conforme esperado.
+
+4 - No quarto teste, foram utilizadas múltiplas variáveis e operações aritméticas. O valor de retorno, uma expressão composta, foi computado corretamente.
+
+5 - O quinto teste simula uma iteração semelhante a um loop de cálculo de fatorial, com uso de múltiplos saltos. A execução condicional sequencial com duas instruções iflez produziu o resultado esperado.
+
+6 - No sexto teste, a primeira linha define v0 com valor 0, em seguida uma instrução iflez tenta saltar para a linha 4. No entanto, esse teste causou uma falha de segmentação (“segmentation fault”) ao ser executado. A análise indica que esse erro ocorreu por conta da falta de verificação rigorosa do destino do salto: como a linha 4 pode não ter sido registrada ainda no vetor linha_offsets no momento da leitura da instrução iflez, o valor de offset calculado ao final pode ser incorreto. Isso faz com que o salto condicional leve a um ponto inválido no vetor de código, resultando em execução de instruções inválidas ou acesso a regiões de memória que causam a falha. Outra possível explicação é a presença de instruções após um ret, que ainda podem ser alcançadas via saltos, algo que o compilador não impede.
+
+Conclusão
+
+Esse tipo de teste demonstra que, embora a estrutura geral do compilador esteja funcional, ele ainda precisa de robustez adicional para tratar casos limites. O compilador já implementa corretamente o uso da pilha, a manipulação de registradores e o controle de fluxo básico. No entanto, melhorias na detecção de erros de entrada, como saltos para linhas inválidas, aumentariam a confiabilidade da ferramenta.
+
+Concluímos que o compilador está funcionando corretamente para a maioria dos programas esperados, com tradução fiel da lógica SBas para código nativo x86-64, mas apresenta vulnerabilidades em casos extremos que podem ser tratados com verificações adicionais.
+	
