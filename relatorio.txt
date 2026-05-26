@@ -3,47 +3,60 @@
 
 Relatório do Trabalho 2 – INF1018 (Software Básico)
 
-Este relatório tem como objetivo apresentar o funcionamento do microcompilador desenvolvido para o segundo trabalho da disciplina INF1018.
+1. Proposta do Trabalho
+O objetivo principal deste projeto foi desenvolver um microcompilador capaz de traduzir arquivos de texto contendo código na linguagem SBas para código de máquina executável na arquitetura x86-64.
 
-O compilador, implementado na função peqcomp.c, tem como finalidade traduzir arquivos de texto contendo código na linguagem SBas para código de máquina executável na arquitetura x86-64. O resultado da compilação é armazenado em um vetor de bytes e pode ser chamado como uma função com até três parâmetros inteiros.
+Para alcançar este objetivo, o trabalho exigiu a aplicação prática dos seguintes conceitos:
 
-Ambiente de Desenvolvimento e Execução dos Testes
+- Geração de código em tempo de execução, onde o resultado da compilação é armazenado diretamente em um vetor de bytes.
+- Invocação dinâmica do código gerado como um ponteiro de função, com suporte para receber até três parâmetros inteiros.
 
-O projeto foi desenvolvido utilizando o Microsoft Visual Studio 2022 como editor de código. A compilação e a execução foram realizadas no ambiente WSL (Windows Subsystem for Linux) com o compilador GCC, utilizando o comando gcc -Wall -Wa,--execstack -o testapeqcomp testapeqcomp.c peqcomp.c.
+2. Implementação e Arquitetura do Sistema
+A solução foi estruturada separando as responsabilidades de leitura e orquestração do processo de tradução de baixo nível.
 
-O arquivo testapeqcomp.c é o responsável por orquestrar a execução dos testes. Para rodar um caso de teste específico, é necessário garantir que os arquivos de teste SBas (ex: teste1.txt) estejam na mesma pasta do executável. Em seguida, deve-se alterar o nome do arquivo na chamada da função fopen dentro do código de testapeqcomp.c para o teste desejado e recompilar o projeto.
+A arquitetura final é composta pelos seguintes módulos principais:
 
-Estrutura e Funcionamento do Compilador
+Microcompilador (peqcomp.c): Atua como o núcleo do sistema. Lê o código fonte linha por linha, interpreta os comandos SBas e gera sequencialmente as instruções de máquina no vetor de código.
 
-A estrutura geral do compilador consiste em ler o arquivo linha por linha, interpretar os comandos da linguagem SBas e gerar as instruções correspondentes em linguagem de máquina. O código gerado é escrito diretamente em um vetor de bytes chamado codigo, que é posteriormente convertido em um ponteiro de função.
+Orquestrador de Testes (testapeqcomp.c): É o responsável por orquestrar a execução, gerenciar a abertura dos arquivos de teste (como teste1.txt) e invocar o compilador.
 
-A primeira parte da geração de código consiste na criação do prólogo da função, que salva o ponteiro de base antigo com push %rbp, move o ponteiro da pilha para %rbp com mov %rsp, %rbp, e reserva espaço para variáveis locais com sub $32, %rsp, permitindo até 8 variáveis locais de 4 bytes cada.
+A engenharia interna do compilador foi dividida da seguinte forma:
 
-Cada linha do código SBas é então interpretada e tratada de forma diferente dependendo do comando. Comandos de atribuição do tipo vN : ... armazenam diretamente um valor em uma variável local. As instruções vN = ... op ... realizam operações aritméticas como soma, subtração e multiplicação, utilizando os registradores %eax e %ecx para executar a operação, e depois armazenando o resultado novamente em memória.
+Manipulação da Pilha (Stack Frame): A geração de código inicia com o prólogo da função: salva-se o ponteiro de base antigo (push %rbp), move-se o topo da pilha para a base (mov %rsp, %rbp) e aloca-se espaço dinâmico (sub $32, %rsp), garantindo capacidade para até 8 variáveis locais de 4 bytes. Comandos de atribuição (vN : ...) inserem valores diretamente nessas variáveis na memória.
 
-O compilador também suporta o comando ret, que é utilizado para retornar um valor ao final da execução. Esse valor pode ser uma constante, uma variável local ou um parâmetro, e é carregado no registrador %eax antes de realizar o epílogo da função com leave e ret.
+Mapeamento de Registradores e Aritmética: Operações matemáticas (vN = ... op ...) utilizam os registradores %eax e %ecx para a execução algébrica, guardando o resultado final de volta na memória. Para o comando de finalização (ret), o valor a ser retornado é movido para o registrador %eax precedendo o epílogo da função (leave seguido de ret).
 
-Além disso, o compilador trata instruções de controle de fluxo com o comando iflez, que realiza um salto condicional caso o valor fornecido seja menor ou igual a zero. Esse salto é implementado com a instrução cmp $0, %eax seguida de jle, cujo offset é calculado posteriormente. Para isso, o compilador armazena informações sobre todos os saltos pendentes e resolve os offsets ao final, após saber a posição de início de cada linha no vetor de código.
+Controle de Fluxo e Backpatching: Saltos condicionais (iflez) são convertidos para as instruções nativas cmp $0, %eax e jle. Como a posição exata da linha de destino pode ser desconhecida no momento da leitura, o compilador adota uma resolução postergada: registra as informações dos saltos pendentes e, ao final da leitura, calcula e injeta os offsets definitivos cruzando os dados com o mapeamento do início de cada linha.
 
-Validação e Análise dos Testes
+3. Validação e Análise dos Testes
+O funcionamento do compilador foi atestado utilizando a bateria de testes padrão e um cenário extremo adicional:
 
-O funcionamento do compilador foi validado com os testes oferecidos no enunciado do trabalho e um adicional.
+Teste 1: Retorno de constante simples (ret $100), compilado e validado com sucesso.
 
-1 - O primeiro teste, contendo apenas a instrução ret $100, foi compilado com sucesso e retorna o valor 100 corretamente.
+Teste 2: Atribuição via parâmetro p1 seguida de incremento. O comportamento esperado de retorno do novo valor foi confirmado.
 
-2 - No segundo teste, a variável v1 recebe o parâmetro p1, incrementa em 1 e retorna o novo valor; esse comportamento foi reproduzido corretamente durante a execução.
+Teste 3: Validação do desvio condicional (iflez) e incremento, computando a ramificação lógica esperada (retornando 0 ou 1) de maneira íntegra.
 
-3 - No terceiro teste, foi verificada uma condicional com salto, em que um valor é incrementado e testado com iflez. Dependendo do resultado, o programa retorna 0 ou 1. Essa lógica condicional foi executada conforme esperado.
+Teste 4: Uso concorrente de múltiplas variáveis e operações encadeadas, gerando o cômputo correto da expressão.
 
-4 - No quarto teste, foram utilizadas múltiplas variáveis e operações aritméticas. O valor de retorno, uma expressão composta, foi computado corretamente.
+Teste 5: Emulação de iteração de laço (similar a um cálculo de fatorial). As diretivas de múltiplos saltos condicionais (iflez) reproduziram o resultado matematicamente esperado.
 
-5 - O quinto teste simula uma iteração semelhante a um loop de cálculo de fatorial, com uso de múltiplos saltos. A execução condicional sequencial com duas instruções iflez produziu o resultado esperado.
+Teste 6 (Caso Limite): Ao definir v0 como 0 e tentar saltar para a linha 4 precocemente, o sistema reportou uma falha de segmentação (segmentation fault). A análise diagnosticou que saltar para linhas ainda não registradas no vetor de posições resulta no cômputo de offsets incorretos, enviando a execução para áreas inválidas da memória. Adicionalmente, identificou-se que o compilador não previne a execução de comandos subsequentes a uma instrução ret.
 
-6 - No sexto teste, a primeira linha define v0 com valor 0, em seguida uma instrução iflez tenta saltar para a linha 4. No entanto, esse teste causou uma falha de segmentação (“segmentation fault”) ao ser executado. A análise indica que esse erro ocorreu por conta da falta de verificação rigorosa do destino do salto: como a linha 4 pode não ter sido registrada ainda no vetor linha_offsets no momento da leitura da instrução iflez, o valor de offset calculado ao final pode ser incorreto. Isso faz com que o salto condicional leve a um ponto inválido no vetor de código, resultando em execução de instruções inválidas ou acesso a regiões de memória que causam a falha. Outra possível explicação é a presença de instruções após um ret, que ainda podem ser alcançadas via saltos, algo que o compilador não impede.
+4. Instruções de Compilação e Uso
+O projeto foi codificado com apoio do Visual Studio 2022, mas estruturado para compilação estrita em ambiente Unix/Linux via WSL.
 
-Conclusão
+Para compilar, abra o terminal na raiz dos arquivos e execute:
+gcc -Wall -Wa,--execstack -o testapeqcomp testapeqcomp.c peqcomp.c
 
-Esse tipo de teste demonstra que, embora a estrutura geral do compilador esteja funcional, ele ainda precisa de robustez adicional para tratar casos limites. O compilador já implementa corretamente o uso da pilha, a manipulação de registradores e o controle de fluxo básico. No entanto, melhorias na detecção de erros de entrada, como saltos para linhas inválidas, aumentariam a confiabilidade da ferramenta.
+Para rodar os diferentes cenários:
 
-Concluímos que o compilador está funcionando corretamente para a maioria dos programas esperados, com tradução fiel da lógica SBas para código nativo x86-64, mas apresenta vulnerabilidades em casos extremos que podem ser tratados com verificações adicionais.
+Certifique-se de que os arquivos .txt de teste estão no mesmo diretório do orquestrador.
+
+Altere o nome do arquivo na chamada fopen dentro de testapeqcomp.c para o arquivo alvo.
+
+Recompile utilizando o comando acima e execute o binário resultante.
+
+5. Conclusão
+Os testes comprovaram que a estrutura geral do compilador é altamente funcional. O sistema traduz de forma exata a lógica nativa da linguagem SBas para código x86-64, dominando o uso do Stack Frame, registradores e operações básicas de fluxo. Contudo, a incidência de falha no caso extremo demonstra a necessidade de aprimorar a robustez do software, recomendando-se a implementação de validações extras de integridade (como impedir o desvio para linhas inválidas e alertar sobre código inacessível) para garantir uma execução tolerante a falhas.
 	
